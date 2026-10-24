@@ -17,8 +17,10 @@ export function findRoute<T = unknown>(
     path = path.slice(0, -1);
   }
 
+  const key = ctx.ignoreCase ? path.toLowerCase() : path;
+
   // Static
-  const staticNode = ctx.static[path];
+  const staticNode = ctx.static[key];
   if (staticNode && staticNode.methods) {
     const staticMatch = staticNode.methods[method] || staticNode.methods[""];
     if (staticMatch !== undefined) {
@@ -29,7 +31,13 @@ export function findRoute<T = unknown>(
   // Lookup tree
   const segments = splitPath(path);
 
-  const match = _lookupTree<T>(ctx.root, method, segments, 0);
+  const match = _lookupTree<T>(
+    ctx.root,
+    method,
+    segments,
+    key === path ? segments : splitPath(key),
+    0,
+  );
 
   if (match === undefined) {
     return;
@@ -49,6 +57,7 @@ function _lookupTree<T>(
   node: Node<T>,
   method: string,
   segments: string[],
+  keys: string[],
   index: number,
 ): MethodData<T> | undefined {
   // 0. End of path
@@ -68,13 +77,11 @@ function _lookupTree<T>(
     );
   }
 
-  const segment = segments[index];
-
   // 1. Static
   if (node.static) {
-    const staticChild = node.static[segment];
+    const staticChild = node.static[keys[index]];
     if (staticChild) {
-      const match = _lookupTree(staticChild, method, segments, index + 1);
+      const match = _lookupTree(staticChild, method, segments, keys, index + 1);
       if (match) {
         return match;
       }
@@ -83,7 +90,7 @@ function _lookupTree<T>(
 
   // 2. Param
   if (node.param) {
-    const match = _lookupTree(node.param, method, segments, index + 1);
+    const match = _lookupTree(node.param, method, segments, keys, index + 1);
     if (match) {
       return match;
     }

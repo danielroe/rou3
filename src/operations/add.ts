@@ -70,7 +70,7 @@ export function addRoute<T>(
       if (segment === "*") {
         paramsMap.push([i, String(_unnamedParamIndex++), true /* optional */]);
       } else if (segment.includes("(") || segment.includes(":", 1) || !/^:[\w-]+$/.test(segment)) {
-        const [regexp, nextIndex] = getParamRegexp(segment, _unnamedParamIndex);
+        const [regexp, nextIndex] = getParamRegexp(segment, _unnamedParamIndex, ctx.ignoreCase);
         _unnamedParamIndex = nextIndex;
         paramsRegexp[i] = regexp;
         node.hasRegexParam = true;
@@ -82,7 +82,7 @@ export function addRoute<T>(
     }
 
     // Static
-    segment = segments[i] = key;
+    segment = segments[i] = ctx.ignoreCase ? key.toLowerCase() : key;
     const child = node.static?.[segment];
     if (child) {
       node = child;
@@ -111,7 +111,7 @@ export function addRoute<T>(
   }
 }
 
-function getParamRegexp(segment: string, unnamedStart = 0): [RegExp, number] {
+function getParamRegexp(segment: string, unnamedStart = 0, ignoreCase?: boolean): [RegExp, number] {
   let _i = unnamedStart;
   // Replace URLPattern \x escapes outside (...) with \uFFFE placeholder
   let _s = "",
@@ -143,5 +143,5 @@ function getParamRegexp(segment: string, unnamedStart = 0): [RegExp, number] {
     .replace(/\((?![?<])/g, () => `(?<${toUnnamedGroupKey(_i++)}>`)
     .replace(/\uFFFE(.)/g, (_, c) => (/[.*+?^${}()|[\]\\]/.test(c) ? `\\${c}` : c));
 
-  return [new RegExp(`^${regex}$`), _i];
+  return [new RegExp(`^${regex}$`, ignoreCase ? "i" : ""), _i];
 }

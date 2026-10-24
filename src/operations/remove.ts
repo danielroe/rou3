@@ -32,7 +32,7 @@ export function removeRoute<T>(ctx: RouterContext<T>, method: string = "", path:
     return;
   }
 
-  _remove(ctx.root, method, segments, 0);
+  _remove(ctx.root, method, segments, 0, ctx.ignoreCase);
 }
 
 function _remove(
@@ -40,6 +40,7 @@ function _remove(
   method: string,
   segments: string[],
   index: number,
+  ignoreCase?: boolean,
 ): void /* should delete */ {
   if (index === segments.length) {
     if (node.methods && method in node.methods) {
@@ -52,12 +53,12 @@ function _remove(
   }
 
   const segment = segments[index];
-  const key = segmentKey(segment);
+  let key = segmentKey(segment);
 
   // Wildcard (terminal: `addRoute` stops at `**`, so skip any trailing segments)
   if (key === 2) {
     if (node.wildcard) {
-      _remove(node.wildcard, method, segments, segments.length);
+      _remove(node.wildcard, method, segments, segments.length, ignoreCase);
       if (_isEmptyNode(node.wildcard)) {
         node.wildcard = undefined;
       }
@@ -68,7 +69,7 @@ function _remove(
   // Param
   if (key === 1) {
     if (node.param) {
-      _remove(node.param, method, segments, index + 1);
+      _remove(node.param, method, segments, index + 1, ignoreCase);
       if (_isEmptyNode(node.param)) {
         node.param = undefined;
       }
@@ -77,9 +78,12 @@ function _remove(
   }
 
   // Static
+  if (ignoreCase) {
+    key = key.toLowerCase();
+  }
   const childNode = node.static?.[key];
   if (childNode) {
-    _remove(childNode, method, segments, index + 1);
+    _remove(childNode, method, segments, index + 1, ignoreCase);
     if (_isEmptyNode(childNode)) {
       delete node.static![key];
       if (Object.keys(node.static!).length === 0) {

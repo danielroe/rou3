@@ -112,7 +112,7 @@ export function findOverlappingRoutes<T>(
   method: string = "",
   pattern: string,
 ): MatchedRoute<T>[] {
-  const query = routeToShapes(pattern);
+  const query = routeToShapes(pattern, ctx.ignoreCase);
   const matches: MatchedRoute<T>[] = [];
   _collectOverlaps(ctx.root, method, query, [], new Set(), matches);
   return matches;

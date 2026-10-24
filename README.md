@@ -158,7 +158,7 @@ rou3 aims for URLPattern-compatible syntax but has intentional differences due t
 | `(.*)` in segment             | Greedy match across `/`            | Segment-scoped (does not cross `/`)                           |
 | `{...}+` / `{...}*` groups    | Cross-segment group repetition     | Only supported within a single segment (no `/` in group body) |
 | Path normalization (`.`/`..`) | Resolves `.`/`..` in input paths   | Not done by default (opt-in with `{ normalize: true }`)       |
-| Case sensitivity              | Can be case-insensitive            | Always case-sensitive                                         |
+| Case sensitivity              | Can be case-insensitive            | Not by default (opt-in with `{ ignoreCase: true }`)           |
 | Non-`/`-prefixed paths        | Supported                          | Paths must start with `/`                                     |
 | Unicode param names           | Supports Unicode identifiers       | Params use `\w` (ASCII word chars only)                       |
 | Percent-encoding              | Normalizes `%xx` sequences         | Does not decode percent-encoded input                         |
@@ -181,6 +181,20 @@ The compiled router also supports this via the `normalize` option:
 const match = compileRouter(router, { normalize: true });
 match("GET", "/foo/bar/../baz"); // Matches "/foo/baz"
 ```
+
+### Case-insensitive matching
+
+By default, matching is case-sensitive. Pass `ignoreCase: true` to `createRouter` to compare static segments case-insensitively and compile regex constraints with the `i` flag. Params keep the casing of the input path, and the compiled router behaves the same.
+
+```js
+const router = createRouter({ ignoreCase: true });
+addRoute(router, "GET", "/Blog/:slug([A-Z]+)", { payload: "blog" });
+
+findRoute(router, "GET", "/blog/Hello");
+// { data: { payload: "blog" }, params: { slug: "Hello" } }
+```
+
+Static segments are folded with `toLowerCase()`. Percent-encoded input is compared as text, so `%C3%A9` matches `%c3%a9` but not the encoded upper-case `%C3%89`.
 
 ### Result ordering
 

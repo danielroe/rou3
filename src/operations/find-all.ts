@@ -17,7 +17,13 @@ export function findAllRoutes<T>(
     path = path.slice(0, -1);
   }
   const segments = splitPath(path);
-  const matches = _findAll(ctx.root, method, segments, 0);
+  const matches = _findAll(
+    ctx.root,
+    method,
+    segments,
+    ctx.ignoreCase ? splitPath(path.toLowerCase()) : segments,
+    0,
+  );
 
   if (opts?.params === false) {
     return matches;
@@ -35,6 +41,7 @@ function _findAll<T>(
   node: Node<T>,
   method: string,
   segments: string[],
+  keys: string[],
   index: number,
   matches: MethodData<T>[] = [],
 ): MethodData<T>[] {
@@ -66,7 +73,7 @@ function _findAll<T>(
       // Consume this segment as the param, then validate regex constraints on
       // the newly collected matches (mirrors `_lookupTree` in find.ts).
       const start = matches.length;
-      _findAll(node.param, method, segments, index + 1, matches);
+      _findAll(node.param, method, segments, keys, index + 1, matches);
       if (node.param.hasRegexParam) {
         for (let r = matches.length - 1; r >= start; r--) {
           if (matches[r].paramsRegexp[index]?.test(segment) === false) matches.splice(r, 1);
@@ -94,9 +101,9 @@ function _findAll<T>(
   // `undefined`, which an object lookup would coerce to a literal "undefined"
   // segment key)
   if (index < segments.length) {
-    const staticChild = node.static?.[segment];
+    const staticChild = node.static?.[keys[index]];
     if (staticChild) {
-      _findAll(staticChild, method, segments, index + 1, matches);
+      _findAll(staticChild, method, segments, keys, index + 1, matches);
     }
   }
 

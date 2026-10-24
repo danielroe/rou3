@@ -35,6 +35,7 @@ test/
   find.test.ts        # Route matching tests (interpreter vs compiled)
   find-all.test.ts    # Multi-match tests
   overlap.test.ts     # Pattern-overlap tests (routesOverlap / compareRoutes / findOverlappingRoutes)
+  ignore-case.test.ts # createRouter({ ignoreCase: true }) (interpreter vs JIT vs AOT parity)
   route-node-keys.test.ts # routeNodeKeys() (fixtures + node-sharing property sweep + shadowing sweep)
   group-names.test.ts # Capture-group name codec (round-trip + injectivity)
   regexp.test.ts      # RegExp conversion tests
@@ -51,7 +52,7 @@ Two entry points: `rou3` (main) and `rou3/compiler`.
 
 ```ts
 // rou3
-createRouter<T>(options?) -> RouterContext<T>
+createRouter<T>(opts?: { ignoreCase?: boolean }) -> RouterContext<T>
 addRoute(ctx, method, path, data?) -> void
 removeRoute(ctx, method, path) -> void
 findRoute(ctx, method, path, opts?) -> MatchedRoute<T> | undefined
@@ -184,6 +185,16 @@ Param names accept `[\w-]+`, but a named capture group must be a valid identifie
 - Emission sites: `getParamRegexp()` (`operations/add.ts`) and all four in `regexp.ts` (plain, mixed-segment, `:name?`/`+`/`*` modifier, `**:name`). Before this, any param with `-` or a leading digit threw `SyntaxError: Invalid capture group name` from `addRoute()`/`routeToRegExp()` as soon as it appeared in a regex-compiled position — whole-segment `:test-id` worked only because it stores the name as a plain string key (#8dfaa48 widened the name class to `[\w-]` but left group emission raw). Pinned in `find.test.ts` "param names that are not valid capture-group names" and the `_regexp-cases.ts` fixtures.
 - The compiler emits `.groups.<name>` property accesses, which are only valid because every emitted name is now an identifier; its runtime `_normalizeGroups` fallback (used when `scanRegExpGroups` can't parse a name, e.g. a unicode group inside a constraint body) inlines a copy of the same decode and must stay in sync with `fromGroupName()`.
 - Known (pre-existing) ambiguity, unrelated to the escape: unnamed captures key on `"0"`, `"1"`, … , so a route that mixes a digit-named param with an unnamed capture (`/w/:0/*`) has two params claiming key `"0"` and the later one wins. Same on `main` before the escape existed — the numeric unnamed-key space simply overlaps digit-only param names.
+
+### Case-insensitive matching (`ignoreCase`)
+
+`createRouter({ ignoreCase: true })` sets `ctx.ignoreCase` (the property is absent on default routers). It is a **router** option, not a lookup/compile option, because folding happens at insert time:
+
+- `addRoute`/`removeRoute` store static keys (tree + `ctx.static`) `toLowerCase()`-d; `getParamRegexp` compiles constraints with the `i` flag.
+- `findRoute`/`findAllRoutes` split the lower-cased path **next to** the original: static lookups read the lower-cased `keys[index]`, while regex tests and param extraction read the original `segments`, so params keep their input casing and constraints see the same text a vue-router-style `i` regex sees. Default routers pass the same array twice (measured perf parity with the single-array code; keep it that way).
+- The compiler emits `let _p=p.toLowerCase()` (static chain/map compare `_p`) and `_s=_p.split("/")` (tree static chain/switch compare `_s[i]`); params and regexes still read `s`. The `p.slice(K)` wildcard-tail shortcut is disabled (`staticPrefixLen = -1` at the root) because lower-casing can change string length (`İ` -> `i̇`), so tails use `s.slice(i).join('/')`.
+- `findOverlappingRoutes` builds its query shapes with the ctx's `ignoreCase` (separate memo map). `routesOverlap`/`compareRoutes`/`routeNodeKeys`/`routeToRegExp` are pattern-only and stay case-sensitive.
+- Folding is `toLowerCase()` on the raw (still percent-encoded) text: `%C3%A9` matches `%c3%a9`, but encoded `É` (`%C3%89`) does not fold to `é`. A handful of raw non-ASCII chars (Kelvin sign, `İ`, Greek prosgegrammeni forms) fold differently under `toLowerCase()` than under regex `i` canonicalization; static segments follow `toLowerCase()`, constraints follow `i`.
 
 ### Input path normalization
 

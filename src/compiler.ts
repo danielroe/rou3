@@ -96,9 +96,10 @@ interface CompilerContext {
 }
 
 function compileRouteMatch(ctx: CompilerContext): string {
+  const ignoreCase = ctx.router.ignoreCase;
   let code = compileStaticMatch(ctx);
 
-  const match = compileNode(ctx, ctx.router.root, [], 1, 1);
+  const match = compileNode(ctx, ctx.router.root, [], 1, ignoreCase ? -1 : 1);
   // Empty root node emit an empty bound check
   if (match) {
     // Mirror splitPath(): drop a trailing empty segment so "//", "/a//" etc.
@@ -109,12 +110,19 @@ function compileRouteMatch(ctx: CompilerContext): string {
     const temps = ctx.regexTemps
       ? `let ${Array.from({ length: ctx.regexTemps }, (_, i) => `_m${i}`).join(",")};`
       : "";
-    const pop = ctx.pathSliced ? `{s.pop();p=p.slice(0,-1)}` : `s.pop();`;
-    code += `let s=p.split("/");if(s.length>1&&s[s.length-1]==="")${pop}let l=s.length;${temps}${match}`;
+    let pop = ctx.pathSliced ? `{s.pop();p=p.slice(0,-1)}` : `s.pop();`;
+    if (ignoreCase) {
+      pop = `{s.pop();_s.pop()}`;
+    }
+    code += `let s=p.split("/")${ignoreCase ? `,_s=_p.split("/")` : ""};if(s.length>1&&s[s.length-1]==="")${pop}let l=s.length;${temps}${match}`;
   }
 
   if (!code) {
     return ctx.opts?.matchAll ? `return [];` : "";
+  }
+
+  if (ignoreCase) {
+    code = `let _p=p.toLowerCase();${code}`;
   }
 
   // Mirrors `fromGroupName()`: strip the unnamed prefix, or decode an escaped
@@ -156,6 +164,7 @@ const SEGMENT_CHAIN_MAX = 32;
 // the interpreter.
 function compileStaticMatch(ctx: CompilerContext): string {
   const matchAll = ctx.opts?.matchAll;
+  const p = ctx.router.ignoreCase ? "_p" : "p";
 
   const entries: [nk: string, node: Node<any>][] = [];
   for (const key in ctx.router.static) {
@@ -180,10 +189,10 @@ function compileStaticMatch(ctx: CompilerContext): string {
     let slashCode = "";
     for (const [nk, node] of entries) {
       const body = compileMethodMatch(ctx, node.methods!, [], -1);
-      code += `${code ? "else " : ""}if(p===${JSON.stringify(nk)}){${body}}`;
-      slashCode += `${slashCode ? "else " : ""}if(p===${JSON.stringify(nk + "/")}){${body}}`;
+      code += `${code ? "else " : ""}if(${p}===${JSON.stringify(nk)}){${body}}`;
+      slashCode += `${slashCode ? "else " : ""}if(${p}===${JSON.stringify(nk + "/")}){${body}}`;
     }
-    return code && `${code}else if(p.charCodeAt(p.length-1)===47){${slashCode}}`;
+    return code && `${code}else if(${p}.charCodeAt(${p}.length-1)===47){${slashCode}}`;
   }
 
   // JIT mode passes a prebuilt object; AOT mode emits its literal source.
@@ -217,7 +226,7 @@ function compileStaticMatch(ctx: CompilerContext): string {
     return "";
   }
   const ref = pushDataSlot(ctx, jitMap ? (jitMap as any) : `{__proto__:null,${mapCode}}`);
-  const lookup = `let _n=${ref}[p];if(_n===void 0&&p.charCodeAt(p.length-1)===47)_n=${ref}[p.slice(0,-1)];`;
+  const lookup = `let _n=${ref}[${p}];if(_n===void 0&&${p}.charCodeAt(${p}.length-1)===47)_n=${ref}[${p}.slice(0,-1)];`;
   return matchAll
     ? `${lookup}if(_n!==void 0){let _a=_n[m];if(_a===void 0)_a=_n[""];if(_a!==void 0)for(let _i=_a.length-1;_i>=0;_i--)r.push({data:_a[_i]});}`
     : `${lookup}if(_n!==void 0){let _d=_n[m];if(_d===void 0)_d=_n[""];if(_d!==void 0)return {data:_d};}`;
@@ -376,6 +385,7 @@ function compileNode(
   }
 
   if (node.static) {
+    const segs = ctx.router.ignoreCase ? "_s" : "s";
     const children: [key: string, match: string][] = [];
     for (const key in node.static) {
       const match = compileNode(
@@ -407,13 +417,13 @@ function compileNode(
         cases += `case ${i}:{${match}}break;`;
       }
       const ref = pushDataSlot(ctx, jitMap ? (jitMap as any) : `{__proto__:null,${mapCode}}`);
-      code += `${hasIf ? "else " : ""}if(l>${currentIdx}){switch(${ref}[s[${currentIdx}]]){${cases}}}`;
+      code += `${hasIf ? "else " : ""}if(l>${currentIdx}){switch(${ref}[${segs}[${currentIdx}]]){${cases}}}`;
       hasIf = true;
     } else if (children.length > 0) {
       let staticCode = "";
       const notNeedBoundCheck = hasIf;
       for (const [key, match] of children) {
-        staticCode += `${hasIf ? "else " : ""}if(s[${currentIdx}]===${JSON.stringify(key)}){${match}}`;
+        staticCode += `${hasIf ? "else " : ""}if(${segs}[${currentIdx}]===${JSON.stringify(key)}){${match}}`;
         hasIf = true;
       }
       code += notNeedBoundCheck ? staticCode : `if(l>${currentIdx}){${staticCode}}`;

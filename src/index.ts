@@ -1,6 +1,6 @@
 export { createRouter } from "./context.ts";
 
-export type { RouterContext, MatchedRoute, InferRouteParams } from "./types.ts";
+export type { RouterContext, RouterOptions, MatchedRoute, InferRouteParams } from "./types.ts";
 
 export { addRoute } from "./operations/add.ts";
 export { findRoute } from "./operations/find.ts";

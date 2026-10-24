@@ -36,18 +36,19 @@ export type Edge = string | 0 | 1;
  * patterns pairwise — N parses instead of N²) and must be treated as
  * immutable by callers.
  */
-export function routeToShapes(pattern: string): RouteShape[] {
-  let shapes = _patternShapes.get(pattern);
+export function routeToShapes(pattern: string, ignoreCase?: boolean): RouteShape[] {
+  const memo = ignoreCase ? _ignoreCaseShapes : _patternShapes;
+  let shapes = memo.get(pattern);
   if (shapes === undefined) {
-    const ctx = createRouter();
+    const ctx = createRouter({ ignoreCase });
     addRoute(ctx, "", pattern);
     shapes = [];
     _collectShapes(ctx.root, [], shapes);
     shapes = mergeShapes(shapes);
     // Keep the memo bounded; pattern vocabularies are small in practice, so a
     // full reset on overflow is simpler than recency tracking.
-    if (_patternShapes.size >= 1024) _patternShapes.clear();
-    _patternShapes.set(pattern, shapes);
+    if (memo.size >= 1024) memo.clear();
+    memo.set(pattern, shapes);
   }
   return shapes;
 }
@@ -109,6 +110,7 @@ const _shapeCache = new WeakMap<MethodData, RouteShape>();
 
 // Pattern -> canonical shapes memo for `routeToShapes` (see its doc comment).
 const _patternShapes = new Map<string, RouteShape[]>();
+const _ignoreCaseShapes = new Map<string, RouteShape[]>();
 
 function _collectShapes(node: Node, edges: Edge[], shapes: RouteShape[]): void {
   if (node.methods) {

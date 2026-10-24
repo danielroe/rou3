@@ -1,6 +1,15 @@
+export interface RouterOptions {
+  /**
+   * Match static segments case-insensitively and compile regex constraints
+   * with the `i` flag. Params are returned with their original casing.
+   */
+  ignoreCase?: boolean;
+}
+
 export interface RouterContext<T = unknown> {
   root: Node<T>;
   static: Record<string, Node<T> | undefined>;
+  ignoreCase?: boolean;
 }
 
 export type ParamsIndexMap = Array<[Index: number, name: string | RegExp, optional: boolean]>;
